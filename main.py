@@ -1,51 +1,53 @@
 import requests
 import json
 import os
-from datetime import datetime
 
 
-#
-# class Demisto:
-#
-#     def __init__(self):
-#         self.username = ""
-#         self.password = ""
-#         self.hostname = ''
-#         self.lastRun = {}
-#
-#     def params(self):
-#         return {'username': self.username, 'password': self.password, 'hostname': self.hostname,
-#                 'proxy': {'http': 'http://172.16.1.1:8080', 'https': 'http://172.16.1.1:8080'}, 'organisationalId': '3'}
-#
-#     def command(self):
-#         # return 'test-module'
-#         return 'blueliv-get-enriched-alert'
-#
-#     def results(self, message):
-#         print('Demisto: Result=' + json.dumps(message))
-#
-#     def getLastRun(self):
-#         return self.lastRun
-#
-#     def setLastRun(self, lastRun):
-#         self.lastRun = lastRun
-#
-#     def incidents(self, incidents):
-#         print(incidents)
-#
-#     def args(self):
-#         return {'id': 215}
-#
-#
-# demisto = Demisto()
+def is_docker():
+    path = '/proc/self/cgroup'
+    return (
+            os.path.exists('/.dockerenv') or
+            os.path.isfile(path) and any('docker' in line for line in open(path))
+    )
 
 
-# PROXY = demisto.params().get('proxy')
-# if not demisto.params().get('proxy', False):
-#     del os.environ['HTTP_PROXY']
-#     del os.environ['HTTPS_PROXY']
-#     del os.environ['http_proxy']
-#     del os.environ['https_proxy']
+if not is_docker():
+    from config import config
+
+
+    class Demisto:
+
+        def __init__(self):
+            self.username = config.username
+            self.password = config.password
+            self.hostname = config.hostname
+            self.lastRun = {}
+
+        def params(self):
+            return {'username': self.username, 'password': self.password, 'hostname': self.hostname,
+                    'proxy': config.proxy, 'organisationalId': str(config.organisationalId)}
+
+        def command(self):
+            # return 'test-module'
+            return 'fetch-incidents'
+
+        def results(self, message):
+            print('Demisto: Result=' + json.dumps(message))
+
+        def getLastRun(self):
+            return self.lastRun
+
+        def setLastRun(self, lastRun):
+            self.lastRun = lastRun
+
+        def incidents(self, incidents):
+            print(incidents)
+
+        def args(self):
+            return {'id': 215}
+
+
+    demisto = Demisto()
 
 
 class Blueliv:
@@ -117,29 +119,34 @@ class Blueliv:
                 alert['module'] = module
                 break
 
+        incidents = []
+
         for resource in alert['resources']:
             credentials = blueliv.get_credentials(resource['id'])
+            for credential in credentials['credentials']:
+                labels = []
+                for label in credentials['labels']:
+                    labels.append(label['name'])
+                wrapper = {
+                    'name': 'Leaked Credentials for ' + credential['username'],
+                    'id': credential['id'],
+                    'username': credential['username'],
+                    'email': credential['email'],
+                    'password': credential['password'],
+                    'domainUrl': credential['domainUrl'],
+                    'domain': credentials['domain'],
+                    'leakOrigin': credentials['leakOrigin'],
+                    'leakFoundAt': credentials['leakFoundAt'],
+                    'leakDate': credentials['leakDate'],
+                    'module-name': alert['module']['name'],
+                    'module-shortname': alert['module']['shortName'],
+                    'module-type': alert['module']['type'],
+                    'resource-type': resource['resource_type']
+                }
 
-            mod_alert = alert
-            if 'resource' in mod_alert:
-                del mod_alert['resource']
-            else:
-                del mod_alert['resources']
-            mod_alert['credentials'] = credentials['credentials']
-            mod_alert['resource'] = resource
-
-            timestamp = int(mod_alert['createdAt']) / 1000
-            createdAtTimestamp = datetime.utcfromtimestamp(timestamp)
-
-            wrapper = {
-                "eventId": mod_alert["id"],
-                "name": mod_alert['module']['name'] + " #" + str(mod_alert["id"]),
-                "rawResponse": mod_alert, "credentials": mod_alert['credentials'],
-                'occurred': createdAtTimestamp.isoformat()
-            }
-
-            return {"Name": mod_alert['module']['name'] + " #" + str(mod_alert["id"]),
-                    "rawJSON": json.dumps(wrapper)}
+                incidents.append({"Name": wrapper['name'],
+                                  "rawJSON": json.dumps(wrapper)})
+        return incidents
 
     def fetch_new_incidents(self):
         lastAlert = 0
@@ -158,9 +165,7 @@ class Blueliv:
                 lastAlert = lastAlert + 1
                 demisto.setLastRun({'alert': lastAlert})
 
-                incident = blueliv.build_incident(alert)
-
-                incidents.append(incident)
+                incidents.extend(blueliv.build_incident(alert))
 
         return incidents
 
