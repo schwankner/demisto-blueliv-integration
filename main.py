@@ -141,7 +141,8 @@ class Blueliv:
                     'module-name': alert['module']['name'],
                     'module-shortname': alert['module']['shortName'],
                     'module-type': alert['module']['type'],
-                    'resource-type': resource['resource_type']
+                    'resource-type': resource['resource_type'],
+                    'alert-id': alert['id']
                 }
 
                 incidents.append({"Name": wrapper['name'],
