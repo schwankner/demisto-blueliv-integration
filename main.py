@@ -1,7 +1,6 @@
+import requests
 import json
 import os
-
-import requests
 
 
 def is_docker():
@@ -128,34 +127,18 @@ class Blueliv:
                 labels = []
                 for label in credentials['labels']:
                     labels.append(label['name'])
+                wrapper = {}
+                for key, value in credential.items():
+                    wrapper[key] = value
+                for key, value in alert.items():
+                    wrapper[key] = value
 
-                wrapper = {
-                    'name': 'Leaked Credentials for ' + credential['username'],
-                    'id': credential['id'],
-                    'username': credential['username'],
-                    'password': credential['password'],
-                    'module-name': alert['module']['name'],
-                    'module-shortname': alert['module']['shortName'],
-                    'module-type': alert['module']['type'],
-                    'resource-type': resource['resource_type'],
-                    'rawCredentials': credential,
-                    'alert-id': alert['id']
-                }
-                if 'portalUrl' in credential:
-                    wrapper['portalUrl'] = credential['portalUrl']
-                    wrapper['classification'] = credential['classification']
-                    wrapper['type'] = credential['type']
-
-                if 'email' in credential:
-                    wrapper['email'] = credential['email'],
-                    wrapper['domainUrl'] = credential['domainUrl']
-                    wrapper['domain'] = credential['domain']
-                    wrapper['leakOrigin'] = credential['leakOrigin']
-                    wrapper['leakFoundAt'] = credential['leakFoundAt']
-                    wrapper['leakDate'] = credential['leakDate']
-
-                incidents.append({"Name": wrapper['name'],
-                                  "rawJSON": json.dumps(wrapper)})
+            if module['type'] == 'CREDENTIALS':
+                name = 'Leaked Credentials for ' + credential['username']
+            else:
+                name = 'Uncategorized BlueLiv Alert'
+            incidents.append({"Name": name,
+                              "rawJSON": json.dumps(wrapper)})
         return incidents
 
     def fetch_new_incidents(self):
@@ -165,7 +148,7 @@ class Blueliv:
             lastRun = demisto.getLastRun()
             lastAlert = lastRun['alert']
         except KeyError:
-            lastAlert = 236  # start alert id
+            lastAlert = 261 # start alert id
 
         while True:
             alert = blueliv.get_alert(lastAlert + 1)
